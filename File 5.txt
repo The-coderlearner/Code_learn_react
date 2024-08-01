@@ -1,0 +1,57 @@
+const fs = require('fs');
+const xlsx = require('xlsx');
+const _ = require('lodash');
+
+const processExcelAndJson = (excelFilePath, jsonFilePath, mappingFilePath) => {
+  return new Promise((resolve, reject) => {
+    // Read the Excel file
+    const workbook = xlsx.readFile(excelFilePath);
+    const sheetName = workbook.SheetNames[0]; // Assuming the first sheet
+    const sheet = workbook.Sheets[sheetName];
+
+    // Convert the Excel sheet to JSON, considering the first row as headers
+    const excelData = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+
+    // Read the JSON data file
+    fs.readFile(jsonFilePath, 'utf8', (err, jsonData) => {
+      if (err) return reject(err);
+      const jsonObject = JSON.parse(jsonData);
+
+      // Read the mapping file
+      fs.readFile(mappingFilePath, 'utf8', (err, mappingData) => {
+        if (err) return reject(err);
+        const mapper = JSON.parse(mappingData);
+
+        // Get the header row from the Excel file
+        const headerRow = excelData[0];
+        const dataRows = excelData.slice(1);
+
+        // Create a mapping from JSON keys to Excel columns
+        const excelColumnMap = {};
+        for (const [jsonKey, excelColumn] of Object.entries(mapper)) {
+          const columnIndex = headerRow.indexOf(excelColumn);
+          if (columnIndex !== -1) {
+            excelColumnMap[jsonKey] = columnIndex;
+          }
+        }
+
+        // Function to check if a row matches the JSON object
+        const rowMatchesJson = (row, jsonItem) => {
+          return Object.keys(mapper).every(jsonKey => {
+            const columnIndex = excelColumnMap[jsonKey];
+            return row[columnIndex] == jsonItem[jsonKey]; // Use == for type coercion
+          });
+        };
+
+        // Check if each JSON object is present in the Excel data
+        const response = jsonObject.every(jsonItem => {
+          return dataRows.some(row => rowMatchesJson(row, jsonItem));
+        });
+
+        resolve(response);
+      });
+    });
+  });
+};
+
+module.exports = processExcelAndJson;
