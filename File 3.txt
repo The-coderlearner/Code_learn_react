@@ -1,0 +1,60 @@
+const fs = require('fs');
+const xlsx = require('xlsx');
+const _ = require('lodash');
+
+const processExcelAndJson = (excelFilePath, jsonFilePath, mappingFilePath) => {
+  return new Promise((resolve, reject) => {
+    // Read the Excel file
+    const workbook = xlsx.readFile(excelFilePath);
+    const sheetName = workbook.SheetNames[0]; // Assuming the first sheet
+    const sheet = workbook.Sheets[sheetName];
+
+    // Convert the Excel sheet to JSON, considering the first row as headers
+    const excelData = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+
+    // Read the JSON data file
+    fs.readFile(jsonFilePath, 'utf8', (err, jsonData) => {
+      if (err) return reject(err);
+      const jsonObject = JSON.parse(jsonData);
+
+      // Read the mapping file
+      fs.readFile(mappingFilePath, 'utf8', (err, mappingData) => {
+        if (err) return reject(err);
+        const mapper = JSON.parse(mappingData);
+
+        // Get the header row from the Excel file
+        const headerRow = excelData[0];
+        const dataRows = excelData.slice(1);
+
+        // Create a mapping from JSON keys to Excel columns
+        const excelColumnMap = {};
+        for (const [jsonKey, excelColumn] of Object.entries(mapper)) {
+          const columnIndex = headerRow.indexOf(excelColumn);
+          if (columnIndex !== -1) {
+            excelColumnMap[jsonKey] = columnIndex;
+          }
+        }
+
+        // Filter unique Acc no in the JSON object
+        const uniqueAccNos = _.uniq(jsonObject.map(item => item[mapper['Acc no']]));
+
+        // Extract those from excelData using the mapper
+        const excelConfirmationData = dataRows.filter(row =>
+          uniqueAccNos.includes(row[excelColumnMap['Acc no']])
+        );
+
+        // Create a set of the filtered Acc no for fast lookup
+        const excelAccNoSet = new Set(excelConfirmationData.map(row => row[excelColumnMap['Acc no']]));
+
+        // Check if each data in the input JSON object is in excelConfirmationData
+        const response = jsonObject.every(item =>
+          excelAccNoSet.has(item[mapper['Acc no']])
+        );
+
+        resolve(response);
+      });
+    });
+  });
+};
+
+module.exports = processExcelAndJson;
