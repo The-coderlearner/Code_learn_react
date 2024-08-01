@@ -1,0 +1,35 @@
+const xlsx = require('xlsx');
+const _ = require('lodash');
+
+const processExcelAndJson = (excelFilePath, jsonObject, mapper) => {
+  // Read the Excel file
+  const workbook = xlsx.readFile(excelFilePath);
+  const sheetName = workbook.SheetNames[0]; // Assuming the first sheet
+  const sheet = workbook.Sheets[sheetName];
+
+  // Convert the Excel sheet to JSON
+  const excelData = xlsx.utils.sheet_to_json(sheet);
+
+  // Filter unique Acc no in the JSON object
+  const uniqueAccNos = _.uniq(jsonObject.map(item => item[mapper['Acc no']]));
+
+  // Extract those from excelData using the mapper
+  const excelConfirmationData = excelData.filter(row => 
+    uniqueAccNos.includes(row[mapper['Acc no']])
+  );
+
+  // Create a set of the filtered Acc no for fast lookup
+  const excelAccNoSet = new Set(excelConfirmationData.map(row => row[mapper['Acc no']]));
+
+  // Check if each data in the input JSON object is in excelConfirmationData
+  const response = jsonObject.every(item => 
+    excelAccNoSet.has(item[mapper['Acc no']])
+  );
+
+  // Close the workbook (optional, as the file is read and not kept open)
+  // xlsx.writeFile(workbook, excelFilePath); // Use only if modifications are made
+
+  return response;
+};
+
+module.exports = processExcelAndJson;

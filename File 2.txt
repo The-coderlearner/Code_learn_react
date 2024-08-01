@@ -1,0 +1,14 @@
+const processExcelAndJson = require('./path/to/your/function');
+
+const excelFilePath = 'path/to/your/excel/file.xlsx';
+const jsonObject = [
+  { "jsonAccNoField": "12345", "otherField": "value1" },
+  { "jsonAccNoField": "67890", "otherField": "value2" }
+];
+const mapper = {
+  "Acc no": "jsonAccNoField",
+  // Add other mappings if necessary
+};
+
+const result = processExcelAndJson(excelFilePath, jsonObject, mapper);
+console.log(result); // Will print true or false based on the presence of data
