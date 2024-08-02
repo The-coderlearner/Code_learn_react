@@ -1,0 +1,46 @@
+const xlsx = require("xlsx");
+
+// Function to fetch relevant rows from Excel based on account numbers
+function fetchRelevantExcelRows(excelFilePath, accountNumbers) {
+  const workbook = xlsx.readFile(excelFilePath);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const range = xlsx.utils.decode_range(sheet['!ref']);
+  
+  const relevantRows = [];
+  for (let rowNum = range.s.r + 1; rowNum <= range.e.r; rowNum++) { // Skip the header row
+    const row = {};
+    for (let colNum = range.s.c; colNum <= range.e.c; colNum++) {
+      const cellAddress = xlsx.utils.encode_cell({ r: rowNum, c: colNum });
+      const cell = sheet[cellAddress];
+      if (cell) {
+        row[xlsx.utils.encode_col(colNum)] = cell.v;
+      }
+    }
+    // Assuming account number is in the first column
+    if (accountNumbers.has(String(row['A']).trim())) {  
+      relevantRows.push(row);
+    }
+  }
+  return relevantRows;
+}
+
+// Convert the filtered rows to JSON format
+function convertRowsToJson(rows) {
+  return rows.map(row => {
+    const jsonRow = {};
+    for (const key in row) {
+      jsonRow[key] = row[key];
+    }
+    return jsonRow;
+  });
+}
+
+// Fetch relevant rows from Excel
+const excelFilePath = "convert.xlsx";
+const accountNumbers = new Set(["12345", "67890"]); // Example account numbers
+const relevantExcelRows = fetchRelevantExcelRows(excelFilePath, accountNumbers);
+
+// Convert the filtered rows to JSON format
+const filteredExcelData = convertRowsToJson(relevantExcelRows);
+
+console.log(JSON.stringify(filteredExcelData, null, 2));
