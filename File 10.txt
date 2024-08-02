@@ -1,0 +1,124 @@
+const xlsx = require("xlsx");
+const fs = require("fs");
+
+// Load JSON file and extract unique account numbers
+const jsonFilePath = "Extracted_Text.json";
+const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, "utf8"));
+const accountNumbers = new Set(jsonData.map(record => String(record["ACCOUNT NUMBER"]).trim()));
+
+// Load the mapper configuration file
+const mapperFilePath = "mapper.json";
+const config = JSON.parse(fs.readFileSync(mapperFilePath, "utf8"));
+
+// Function to normalize dates
+function normalizeDate(value) {
+  if (typeof value === "number") {
+    const excelBaseDate = new Date(Date.UTC(1899, 11, 30));
+    const date = new Date(excelBaseDate.getTime() + value * 86400 * 1000);
+    return date.toISOString().split("T")[0];
+  }
+  if (typeof value === "string") {
+    const dateFormats = [
+      { regex: /^\d{1,2}\/\d{1,2}\/\d{4}$/, parse: (str) => {
+          const [month, day, year] = str.split('/').map(Number);
+          return new Date(year, month - 1, day);
+        }
+      }
+    ];
+    for (const { regex, parse } of dateFormats) {
+      if (regex.test(value)) {
+        const date = parse(value);
+        if (!isNaN(date.getTime())) {
+          return date.toISOString().split("T")[0];
+        }
+      }
+    }
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split("T")[0];
+    }
+  }
+  return value;
+}
+
+// Function to normalize values based on type
+function normalizeValue(value, isDateField) {
+  if (isDateField) {
+    return normalizeDate(value);
+  }
+  return value;
+}
+
+// Function to compare records and identify differences
+function compareRecords(excelRow, jsonRecord, mappings, dateFields) {
+  const differences = {};
+  for (const [excelCol, jsonKey] of Object.entries(mappings)) {
+    const isDateField = dateFields.includes(jsonKey);
+    const excelValue = normalizeValue(excelRow[excelCol], isDateField);
+    const jsonValue = normalizeValue(jsonRecord[jsonKey], isDateField);
+    if (excelValue !== jsonValue) {
+      differences[excelCol] = { Excel: excelValue, JSON: jsonValue };
+    }
+  }
+  return differences;
+}
+
+// Function to print differences in both files
+function printDifferences(excelRow, jsonRecord, differences) {
+  console.log("Differences:");
+  for (const [col, diff] of Object.entries(differences)) {
+    console.log(`  ${col}: Excel = "${diff.Excel}", JSON = "${diff.JSON}"`);
+  }
+}
+
+// Function to fetch relevant rows from Excel based on account numbers
+function fetchRelevantExcelRows(excelFilePath, accountNumbers) {
+  const workbook = xlsx.readFile(excelFilePath);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const range = xlsx.utils.decode_range(sheet['!ref']);
+  
+  const relevantRows = [];
+  for (let rowNum = range.s.r + 1; rowNum <= range.e.r; rowNum++) {
+    const row = {};
+    for (let colNum = range.s.c; colNum <= range.e.c; colNum++) {
+      const cellAddress = xlsx.utils.encode_cell({ r: rowNum, c: colNum });
+      const cell = sheet[cellAddress];
+      if (cell) {
+        row[xlsx.utils.encode_col(colNum)] = cell.v;
+      }
+    }
+    if (accountNumbers.has(String(row[0]).trim())) {  // Assuming account number is in the first column
+      relevantRows.push(row);
+    }
+  }
+  return relevantRows;
+}
+
+// Fetch relevant rows from Excel
+const excelFilePath = "convert.xlsx";
+const relevantExcelRows = fetchRelevantExcelRows(excelFilePath, accountNumbers);
+
+// Convert the filtered rows to JSON format
+const filteredExcelData = relevantExcelRows.map(row => xlsx.utils.sheet_to_json(row, { header: 1 }));
+
+// Compare the filtered Excel data with the JSON data
+filteredExcelData.forEach((excelRow) => {
+  const transactionId = excelRow["Transaction ID"];
+  jsonData.forEach((jsonRecord) => {
+    if (jsonRecord.Transaction_ID == transactionId) {
+      const differences = compareRecords(
+        excelRow,
+        jsonRecord,
+        config.mappings,
+        config.dateFields
+      );
+      if (Object.keys(differences).length > 0) {
+        printDifferences(excelRow, jsonRecord, differences);
+      } else {
+        console.log(`No differences found for Transaction ID ${transactionId}`);
+      }
+    }
+  });
+});
+
+console.log("Comparison complete.");
