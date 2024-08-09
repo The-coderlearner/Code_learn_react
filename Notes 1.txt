@@ -1,0 +1,37 @@
+const fs = require('fs');
+const path = require('path');
+
+// Function to delete all files in a specific folder
+function deleteAllFilesInFolder(folderPath) {
+  fs.readdir(folderPath, (err, files) => {
+    if (err) {
+      console.error('Error reading directory:', err);
+      return;
+    }
+
+    files.forEach((file) => {
+      const filePath = path.join(folderPath, file);
+
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          console.error(`Error deleting file ${file}:`, err);
+        } else {
+          console.log(`${file} was deleted successfully.`);
+        }
+      });
+    });
+  });
+}
+
+// Example usage in a route
+app.get('/your-route', (req, res) => {
+  // Your route logic here
+
+  // Specify the folder path where files are stored
+  const folderPath = path.join(__dirname, 'your-folder');
+
+  // After your processing, delete all files
+  deleteAllFilesInFolder(folderPath);
+
+  res.send('Files processed and deleted.');
+});
